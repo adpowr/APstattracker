@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>StatTrack</title>
+<!-- PWA / Add to Home Screen tags -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StatTrack">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%230d0f14'/><text y='.9em' font-size='60' x='10'>🏐</text><text y='95' x='8' font-size='22' font-weight='bold' fill='%2300e5a0' font-family='Arial'>ST</text></svg>">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#0d0f14;--surface:#161a23;--card:#1e2330;--accent:#00e5a0;--accent2:#ff4d6d;--accent3:#ffd166;--text:#ffffff;--muted:#a0a8b8;--border:#2a303e;}
@@ -207,6 +213,13 @@ input[type="text"]:focus{border-color:var(--accent);}
 
 <!-- ══ SETUP ══ -->
 <div class="screen active" id="setup">
+  <!-- INSTALL BANNER — only shows in Safari, not when already installed -->
+  <div id="installBanner" style="display:none;background:#1a2a1a;border:1px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:4px;gap:8px;align-items:center;">
+    <div style="font-size:13px;color:var(--text);line-height:1.4;">
+      📲 <strong>Add to Home Screen:</strong> Tap the Share button <strong>↑</strong> at the bottom of Safari, then tap <strong>"Add to Home Screen"</strong>
+    </div>
+    <button onclick="document.getElementById('installBanner').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;flex-shrink:0;padding:0 4px;">×</button>
+  </div>
   <div><div class="logo">STAT<span>TRACK</span></div><div class="tagline">Live game tracking — tap to record</div></div>
   <div><label>Game / Match Name</label><input type="text" id="gameName" placeholder="e.g. U16 Netball Finals" /></div>
   <div>
@@ -221,6 +234,15 @@ input[type="text"]:focus{border-color:var(--accent);}
     </div>
   </div>
   <div><label>Team Names</label><div class="teams-row"><input type="text" id="teamA" placeholder="Our Team" /><input type="text" id="teamB" placeholder="Opposition" /></div></div>
+  <div>
+    <label id="periodDurationLabel">Quarter Duration (minutes)</label>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button onclick="adjustDuration(-1)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);width:44px;height:44px;font-size:22px;cursor:pointer;flex-shrink:0;">−</button>
+      <div id="periodDurationDisplay" style="font-family:'Bebas Neue',sans-serif;font-size:36px;color:var(--accent);min-width:50px;text-align:center;">15</div>
+      <button onclick="adjustDuration(1)" style="background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--accent);border-color:var(--accent);width:44px;height:44px;font-size:22px;cursor:pointer;flex-shrink:0;">+</button>
+      <span style="color:var(--muted);font-size:13px;">mins per period</span>
+    </div>
+  </div>
   <div>
     <div class="section-label" style="margin-bottom:8px;">Our Players<span class="view-all-link" onclick="showScreen('teamManager')">Manage Teams →</span></div>
     <div id="rosterPickerWrap"></div>
@@ -250,7 +272,8 @@ input[type="text"]:focus{border-color:var(--accent);}
 
   <!-- Header -->
   <div class="tracker-header">
-    <div>
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      <button onclick="backToSetup()" style="background:none;border:none;color:var(--muted);font-size:11px;font-weight:700;cursor:pointer;text-align:left;padding:0;letter-spacing:.5px;">← MENU</button>
       <div class="game-title" id="trackerTitle">GAME</div>
       <div id="trackerPeriodSub" style="font-size:9px;font-weight:700;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-top:1px;">TAP ▶ START</div>
     </div>
@@ -368,15 +391,17 @@ const DEFAULT_STATS={
 };
 const GOAL_STATS=['Goals','Tries','Points'];
 
-// Period structure per sport
+// Period structure per sport — includes default duration in minutes
 const SPORT_PERIODS={
-  netball: {label:'Quarter', short:'Q', count:4},
-  soccer:  {label:'Half',    short:'H', count:2},
-  basketball:{label:'Quarter',short:'Q',count:4},
-  hockey:  {label:'Quarter', short:'Q', count:4},
-  rugby:   {label:'Half',    short:'H', count:2},
-  custom:  {label:'Half',    short:'H', count:2},
+  netball:    {label:'Quarter', short:'Q', count:4, duration:15},
+  soccer:     {label:'Half',    short:'H', count:2, duration:35},
+  basketball: {label:'Quarter', short:'Q', count:4, duration:10},
+  hockey:     {label:'Quarter', short:'Q', count:4, duration:15},
+  rugby:      {label:'Half',    short:'H', count:2, duration:40},
+  custom:     {label:'Half',    short:'H', count:2, duration:20},
 };
+
+let periodDurationMins=15; // adjustable, set per sport on game start
 const NAMES={
   netball:['Emma','Sophie','Olivia','Charlotte','Isabella','Mia','Grace','Lily','Ava','Hannah','Chloe','Zoe','Amelia','Lucy','Ella','Ruby','Natalie','Jessica','Paige','Sienna','Jade','Taylah','Brooke','Kayla','Leah'],
   soccer:['Liam','Noah','Oliver','James','William','Logan','Mason','Ethan','Lucas','Jack','Harry','Finn','Leo','Max','Oscar','Dylan','Jayden','Ryan','Tyler','Connor'],
@@ -417,7 +442,18 @@ document.getElementById('sportGrid').addEventListener('click',e=>{
   document.querySelectorAll('#sportGrid .sport-btn').forEach(b=>b.classList.remove('selected'));
   btn.classList.add('selected');selectedSport=btn.dataset.sport;
   selectedStats=new Set(DEFAULT_STATS[selectedSport]);initStatPills();renderRosterPicker();
+  // Update duration to sport default
+  const pc=SPORT_PERIODS[selectedSport];
+  periodDurationMins=pc.duration;
+  document.getElementById('periodDurationDisplay').textContent=periodDurationMins;
+  const periodWord=pc.count===2?'Half':'Quarter';
+  document.getElementById('periodDurationLabel').textContent=`${periodWord} Duration (minutes)`;
 });
+
+function adjustDuration(delta){
+  periodDurationMins=Math.max(1, Math.min(60, periodDurationMins+delta));
+  document.getElementById('periodDurationDisplay').textContent=periodDurationMins;
+}
 document.getElementById('newTeamSportGrid').addEventListener('click',e=>{
   const btn=e.target.closest('.sport-btn');if(!btn)return;
   document.querySelectorAll('#newTeamSportGrid .sport-btn').forEach(b=>b.classList.remove('selected'));
@@ -502,18 +538,18 @@ function startTracking(){
   const hasGoalStat=[...selectedStats].some(s=>GOAL_STATS.includes(s));
   document.getElementById('autoScoreBadgeA').style.visibility=hasGoalStat?'visible':'hidden';
 
-  // Init periods
+  // Init periods with countdown duration
+  periodDurationMins=parseInt(document.getElementById('periodDurationDisplay').textContent)||15;
   const pc=SPORT_PERIODS[selectedSport]||SPORT_PERIODS.custom;
   periods=Array.from({length:pc.count},(_,i)=>({
-    label: pc.count===2
-      ? (i===0?'1st Half':'2nd Half')
-      : `${pc.short}${i+1}`,
-    longLabel: pc.count===2
-      ? (i===0?'1st Half':'2nd Half')
-      : `${pc.label} ${i+1}`,
+    label: pc.count===2?(i===0?'1st Half':'2nd Half'):`${pc.short}${i+1}`,
+    longLabel: pc.count===2?(i===0?'1st Half':'2nd Half'):`${pc.label} ${i+1}`,
+    totalSecs: periodDurationMins*60, // countdown from this
     elapsed:0, done:false,
   }));
   currentPeriodIdx=-1;
+  // Show full period time on timer display
+  document.getElementById('timerDisplay').textContent=fmtTime(periodDurationMins*60);
   renderPeriodBar();
 
   renderPlayerGrid();
@@ -713,23 +749,22 @@ function renderPeriodBar(){
 }
 
 function selectPeriod(idx){
-  // Save current period timer before switching
   if(currentPeriodIdx>=0&&currentPeriodIdx<periods.length){
     periods[currentPeriodIdx].elapsed=getElapsed();
   }
-  // Pause timer
   if(timerRunning){
     timerAccumulated=getElapsed();timerStartedAt=null;timerRunning=false;
     clearInterval(timerInterval);
     document.getElementById('timerDisplay').classList.remove('running');
   }
-  // Only allow selecting current or next
   if(idx>currentPeriodIdx+1)return;
   currentPeriodIdx=idx;
-  // Restore this period's elapsed time and resume
+  // Reset countdown for this period (start fresh from full duration)
   timerAccumulated=periods[idx].elapsed||0;
   timerStartedAt=Date.now();timerRunning=true;
-  document.getElementById('timerDisplay').classList.add('running');
+  const el=document.getElementById('timerDisplay');
+  el.classList.add('running');
+  el.style.color='var(--accent)';
   timerInterval=setInterval(updateTimerDisplay,500);
   renderPeriodBar();
   showToast(`${periods[idx].longLabel} started ▶`);
@@ -786,13 +821,20 @@ function changeScore(team,delta){
 function animateScore(id){const el=document.getElementById(id);el.classList.remove('score-bump');void el.offsetWidth;el.classList.add('score-bump');}
 
 // ══ TIMER ══
+function getPeriodTotal(){
+  if(currentPeriodIdx>=0&&currentPeriodIdx<periods.length) return periods[currentPeriodIdx].totalSecs;
+  return periodDurationMins*60;
+}
 function getElapsed(){
-  // Returns seconds for the CURRENT period only (resets per period)
+  // How many seconds have counted UP in this period
   if(timerRunning&&timerStartedAt!==null)return timerAccumulated+Math.floor((Date.now()-timerStartedAt)/1000);
   return timerAccumulated;
 }
+function getCountdown(){
+  // Remaining seconds = total - elapsed (never below 0)
+  return Math.max(0, getPeriodTotal()-getElapsed());
+}
 function totalGameTime(){
-  // Sum all completed period times + current period
   let total=0;
   periods.forEach((p,i)=>{
     if(i<currentPeriodIdx) total+=p.elapsed||0;
@@ -800,7 +842,24 @@ function totalGameTime(){
   });
   return total;
 }
-function updateTimerDisplay(){document.getElementById('timerDisplay').textContent=fmtTime(getElapsed());}
+function updateTimerDisplay(){
+  const remaining=getCountdown();
+  const el=document.getElementById('timerDisplay');
+  el.textContent=fmtTime(remaining);
+  // Turn red when under 1 minute
+  if(remaining<=60&&remaining>0) el.style.color='var(--accent2)';
+  else if(remaining===0) el.style.color='var(--muted)';
+  else if(timerRunning) el.style.color='var(--accent)';
+  else el.style.color='var(--text)';
+  // Auto-stop when hits zero
+  if(remaining===0&&timerRunning){
+    timerAccumulated=getElapsed();timerStartedAt=null;timerRunning=false;
+    clearInterval(timerInterval);
+    el.classList.remove('running');
+    renderPeriodBar();
+    showToast(`⏱ ${periods[currentPeriodIdx]?.longLabel||'Period'} ended!`);
+  }
+}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&timerRunning)updateTimerDisplay();});
 function fmtTime(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
 
@@ -832,6 +891,14 @@ function exportStats(){
   players.forEach(p=>{text+=`\n👤 ${p}\n`;Object.entries(stats[p]).forEach(([s,v])=>text+=`  ${s}: ${v}\n`);});
   navigator.clipboard.writeText(text).then(()=>showToast('Copied! Paste into Notes or OneNote'));
 }
+function backToSetup(){
+  if(timerRunning||Object.values(stats).some(p=>Object.values(p).some(v=>v>0))){
+    if(!confirm('Return to menu? Current game progress will be lost unless saved first.')) return;
+  }
+  clearInterval(timerInterval);timerRunning=false;
+  showScreen('setup');renderHistoryStrip();
+}
+
 function endGame(){
   if(!gameSaved){if(confirm('Save this game before leaving?'))saveGame();}
   clearInterval(timerInterval);timerRunning=false;showScreen('setup');renderHistoryStrip();
@@ -889,6 +956,18 @@ function showToast(msg){const t=document.getElementById('toast');t.textContent=m
 
 // ══ INIT ══
 initStatPills();renderRosterPicker();renderHistoryStrip();renderSavedTeams();
+// Set default duration for default sport (netball = 15min quarters)
+periodDurationMins=SPORT_PERIODS[selectedSport].duration;
+document.getElementById('periodDurationDisplay').textContent=periodDurationMins;
+
+// Show install banner in Safari if not already installed as PWA
+const isStandalone=window.navigator.standalone===true;
+const isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+if(isIOS && isSafari && !isStandalone){
+  const banner=document.getElementById('installBanner');
+  banner.style.display='flex';
+}
 </script>
 </body>
 </html>
